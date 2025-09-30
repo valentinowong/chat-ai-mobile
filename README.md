@@ -48,3 +48,5 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+This project is related to a LLM chat app I want to build using react native expo app for iOS, android, and web. By leveraging the AI SDK by Vercel, I want to create a unified way to access various LLM models (like ChatGPT from OpenAI or Gemini by Google). A user should be able to select from a list of different models to use for different chats. Also, they should be able to enter their own api-key in order to access those services (and thus pay for those services themselves based on usage). These api-keys will be stored on device. Some of the libraries it will use include: expo-sqlite for storing the chats locally, zeego from dropdown menus (like when selecting which model to use), react-native-mmkv for storing the api-keys, shopify/flash-list for displaying the chats on the screen, expo-clipboard for copy text to a clipboard, react-native-keyboard-controller for managing the onscreen keyboard. 
