@@ -27,12 +27,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="chat/[id]"
-        options={{
-          href: null, // hide from the tab bar
-        }}
-      />
     </Tabs>
   );
 }

@@ -37,3 +37,38 @@ export async function updateMessageContent(id: string, content: string): Promise
   const db = await dbReady;
   await db.runAsync('UPDATE messages SET content=? WHERE id=?', content, id);
 }
+
+export async function deleteMessage(id: string): Promise<void> {
+  const db = await dbReady;
+  await db.runAsync('DELETE FROM messages WHERE id=?', id);
+}
+
+export async function updateChatTitle(id: string, title: string): Promise<Chat | null> {
+  const db = await dbReady;
+  const now = Date.now();
+  await db.runAsync('UPDATE chats SET title=?, updatedAt=? WHERE id=?', title, now, id);
+  return (await db.getFirstAsync<Chat>('SELECT * FROM chats WHERE id=?', id)) ?? null;
+}
+
+export async function updateChatModel(
+  id: string,
+  provider: Chat['provider'],
+  model: string,
+): Promise<Chat | null> {
+  const db = await dbReady;
+  const now = Date.now();
+  await db.runAsync(
+    'UPDATE chats SET provider=?, model=?, updatedAt=? WHERE id=?',
+    provider,
+    model,
+    now,
+    id,
+  );
+  return (await db.getFirstAsync<Chat>('SELECT * FROM chats WHERE id=?', id)) ?? null;
+}
+
+export async function deleteChat(id: string): Promise<void> {
+  const db = await dbReady;
+  await db.runAsync('DELETE FROM messages WHERE chatId=?', id);
+  await db.runAsync('DELETE FROM chats WHERE id=?', id);
+}

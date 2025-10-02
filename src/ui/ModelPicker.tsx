@@ -1,7 +1,7 @@
-import { BottomSheetBackdrop, BottomSheetModal } from '@gorhom/bottom-sheet';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { PROVIDERS } from '../lib/ai/models';
+import { BottomSheetModal, type BottomSheetModalRef } from './BottomSheetModal';
 
 type ProviderId = 'openai' | 'google';
 
@@ -22,9 +22,8 @@ export function ModelPicker({
   textStyle,
   placeholderText = 'Select model',
 }: Props) {
-  const modalRef = useRef<BottomSheetModal>(null);
+  const modalRef = useRef<BottomSheetModalRef>(null);
   const [query, setQuery] = useState('');
-  const snapPoints = useMemo(() => ['35%', '75%'], []);
 
   const open = useCallback(() => {
     if (Platform.OS === 'web') {
@@ -48,7 +47,7 @@ export function ModelPicker({
   const currentLabel = useMemo(() => {
     const provider = PROVIDERS[value?.provider as ProviderId];
     const model = provider?.models.find(m => m.id === value?.model);
-    if (provider && model) return `${provider.label} · ${model.label}`;
+    if (model) return model.label;
     return placeholderText;
   }, [value, placeholderText]);
 
@@ -192,19 +191,7 @@ export function ModelPicker({
           </Pressable>
         </Modal>
       ) : (
-        <BottomSheetModal
-          ref={modalRef}
-          snapPoints={snapPoints}
-          backdropComponent={(props) => (
-            <BottomSheetBackdrop
-              {...props}
-              appearsOnIndex={0}
-              disappearsOnIndex={-1}
-              pressBehavior="close"
-            />
-          )}
-          enablePanDownToClose
-        >
+        <BottomSheetModal ref={modalRef}>
           {Content}
         </BottomSheetModal>
       )}
