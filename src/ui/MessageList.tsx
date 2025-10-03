@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Message } from '../types';
 
@@ -33,6 +33,9 @@ export function MessageList({ messages, onRequestDelete }: MessageListProps) {
         const isSystem = item.role === 'system';
         const trimmedContent = item.content.trim();
         const showTyping = isAssistant && trimmedContent.length === 0;
+        const isLocalImage = trimmedContent.startsWith('file://');
+        const isDataUrlImage = /^data:image\//i.test(trimmedContent);
+        const isImageMessage = isLocalImage || isDataUrlImage;
 
         return (
           <Pressable
@@ -51,10 +54,19 @@ export function MessageList({ messages, onRequestDelete }: MessageListProps) {
                 isUser ? styles.userBubble : null,
                 isAssistant ? styles.assistantBubble : null,
                 isSystem ? styles.systemBubble : null,
+                isImageMessage ? styles.imageBubble : null,
               ]}
             >
               {showTyping ? (
                 <TypingIndicator />
+              ) : isImageMessage ? (
+                <Image
+                  source={{ uri: trimmedContent }}
+                  style={styles.generatedImage}
+                  resizeMode="cover"
+                  accessible
+                  accessibilityLabel="Generated image"
+                />
               ) : (
                 <Text style={[styles.content, isUser ? styles.userContent : null]}>{trimmedContent || '…'}</Text>
               )}
@@ -135,6 +147,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
     borderColor: '#CBD5F5',
   },
+  imageBubble: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
   content: {
     fontSize: 16,
     lineHeight: 22,
@@ -169,6 +185,13 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginHorizontal: 3,
     backgroundColor: '#CBD5F5',
+  },
+  generatedImage: {
+    width: 240,
+    maxWidth: '100%',
+    aspectRatio: 1,
+    borderRadius: 16,
+    backgroundColor: '#E2E8F0',
   },
 });
 

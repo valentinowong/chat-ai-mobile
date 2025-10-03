@@ -1,5 +1,7 @@
-import { streamReply } from '@/src/lib/ai/clients';
+import { generateImageFromPrompt, streamReply } from '@/src/lib/ai/clients';
+import { isImageModel } from '@/src/lib/ai/models';
 import { addMessage, deleteMessage, getChat, listMessages, updateChatModel, updateChatTitle, updateMessageContent } from '@/src/lib/db/chat';
+import { File } from 'expo-file-system';
 import { getApiKey } from '@/src/lib/storage/keys';
 import type { Chat, Message } from '@/src/types';
 import { InputBar } from '@/src/ui/InputBar';
@@ -55,6 +57,9 @@ export default function ChatScreen() {
     if (!chat || isSending) return;
     const trimmed = text.trim();
     if (!trimmed) return;
+    const provider = selection?.provider ?? chat.provider;
+    const model = selection?.model ?? chat.model;
+    const imageModelSelected = isImageModel(provider, model);
     setIsSending(true);
     try {
       const user = await addMessage(chat.id, 'user', trimmed);
@@ -73,16 +78,39 @@ export default function ChatScreen() {
         }
       }
 
-      const key = await getApiKey(chat.provider);
-      if (!key) { Alert.alert('Missing API key', `Add your ${chat.provider} key in Settings`); return; }
+      const key = await getApiKey(provider);
+      if (!key) {
+        Alert.alert('Missing API key', `Add your ${provider} key in Settings`);
+        return;
+      }
 
       const assistant = await addMessage(chat.id, 'assistant', '');
       setMessages(prev => [...prev, { ...assistant }]);
 
+      if (imageModelSelected) {
+        const image = await generateImageFromPrompt({
+          provider,
+          model,
+          prompt: trimmed,
+          apiKey: key,
+        });
+
+        if (image.uri) {
+          setMessages(prev => prev.map(m => (m.id === assistant.id ? { ...m, content: image.uri } : m)));
+          await updateMessageContent(assistant.id, image.uri);
+        } else {
+          const fallback = image.text?.trim() || 'No image was generated.';
+          setMessages(prev => prev.map(m => (m.id === assistant.id ? { ...m, content: fallback } : m)));
+          await updateMessageContent(assistant.id, fallback);
+          Alert.alert('Image unavailable', 'The model did not return an image for this prompt.');
+        }
+        return;
+      }
+
       let acc = '';
       const final = await streamReply({
-        provider: chat.provider,
-        model: chat.model,
+        provider,
+        model,
         apiKey: key,
         messages: [...messages, user].map(({ role, content }) => ({ role, content })),
         onToken: (chunk) => {
@@ -113,6 +141,14 @@ export default function ChatScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
+            const content = message.content?.trim?.();
+            if (content && content.startsWith('file://')) {
+              try {
+                new File(content).delete();
+              } catch (fileErr) {
+                console.warn('Failed to delete image file', fileErr);
+              }
+            }
             await deleteMessage(message.id);
             setMessages((prev) => prev.filter((m) => m.id !== message.id));
           } catch (err: any) {

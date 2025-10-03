@@ -1,9 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { PROVIDERS } from '../lib/ai/models';
+import { PROVIDERS, type ProviderId, type ProviderModel } from '../lib/ai/models';
 import { BottomSheetModal, type BottomSheetModalRef } from './BottomSheetModal';
-
-type ProviderId = 'openai' | 'google';
 
 type PickerValue = { provider: ProviderId; model: string };
 
@@ -51,12 +49,17 @@ export function ModelPicker({
     return placeholderText;
   }, [value, placeholderText]);
 
+  const describeModel = useCallback((model: ProviderModel) => {
+    const suffix = model.kind === 'image' ? ' · Image generation' : '';
+    return `${model.label} (${model.id})${suffix}`;
+  }, []);
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const entries: Array<
+    const entries: (
       | { kind: 'header'; id: string; text: string }
-      | { kind: 'item'; id: string; provider: ProviderId; modelId: string; text: string }
-    > = [];
+      | { kind: 'item'; id: string; provider: ProviderId; model: ProviderModel; text: string }
+    )[] = [];
     (Object.keys(PROVIDERS) as ProviderId[]).forEach((pid) => {
       const p = PROVIDERS[pid];
       const filtered = p.models.filter(
@@ -64,7 +67,8 @@ export function ModelPicker({
           !q ||
           m.label.toLowerCase().includes(q) ||
           m.id.toLowerCase().includes(q) ||
-          p.label.toLowerCase().includes(q)
+          p.label.toLowerCase().includes(q) ||
+          (m.kind === 'image' && 'image'.includes(q))
       );
       if (filtered.length > 0) {
         entries.push({ kind: 'header', id: `h:${pid}`, text: p.label });
@@ -73,14 +77,14 @@ export function ModelPicker({
             kind: 'item',
             id: `${pid}:${m.id}`,
             provider: pid,
-            modelId: m.id,
-            text: `${m.label} (${m.id})`,
+            model: m,
+            text: describeModel(m),
           });
         });
       }
     });
     return entries;
-  }, [query]);
+  }, [describeModel, query]);
 
   function select(provider: ProviderId, modelId: string) {
     onChange({ provider, model: modelId });
@@ -117,7 +121,7 @@ export function ModelPicker({
           ) : (
             <Pressable
               key={row.id}
-              onPress={() => select(row.provider, row.modelId)}
+              onPress={() => select(row.provider, row.model.id)}
               style={{
                 paddingVertical: 10,
                 borderBottomWidth: 1,
@@ -126,7 +130,7 @@ export function ModelPicker({
             >
               <Text>
                 {row.text}{' '}
-                {value?.provider === row.provider && value?.model === row.modelId ? '✓' : ''}
+                {value?.provider === row.provider && value?.model === row.model.id ? '✓' : ''}
               </Text>
             </Pressable>
           )
