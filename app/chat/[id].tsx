@@ -1,5 +1,5 @@
 import { generateImageFromPrompt, streamReply } from '@/src/lib/ai/clients';
-import { isImageModel } from '@/src/lib/ai/models';
+import { isImageModel, providerRequiresApiKey, useAvailableProviders } from '@/src/lib/ai/models';
 import { addMessage, deleteMessage, getChat, listMessages, updateChatModel, updateChatTitle, updateMessageContent } from '@/src/lib/db/chat';
 import { File } from 'expo-file-system';
 import { getApiKey } from '@/src/lib/storage/keys';
@@ -17,6 +17,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
   const headerHeight = useHeaderHeight();
+  const providers = useAvailableProviders();
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -59,7 +60,7 @@ export default function ChatScreen() {
     if (!trimmed) return;
     const provider = selection?.provider ?? chat.provider;
     const model = selection?.model ?? chat.model;
-    const imageModelSelected = isImageModel(provider, model);
+    const imageModelSelected = isImageModel(provider, model, providers);
     setIsSending(true);
     try {
       const user = await addMessage(chat.id, 'user', trimmed);
@@ -78,8 +79,9 @@ export default function ChatScreen() {
         }
       }
 
-      const key = await getApiKey(provider);
-      if (!key) {
+      const requiresKey = providerRequiresApiKey(provider, providers);
+      const key = requiresKey ? await getApiKey(provider) : '';
+      if (requiresKey && !key) {
         Alert.alert('Missing API key', `Add your ${provider} key in Settings`);
         return;
       }

@@ -1,3 +1,4 @@
+import { useAvailableProviders } from '@/src/lib/ai/models';
 import { getApiKey, setApiKey } from '@/src/lib/storage/keys';
 import { useEffect, useState } from 'react';
 import {
@@ -14,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function Settings() {
   const [openai, setOpenAI] = useState('');
   const [google, setGoogle] = useState('');
+  const providers = useAvailableProviders();
+  const appleAvailable = providers.some((provider) => provider.id === 'apple');
   useEffect(() => { (async () => {
     setOpenAI(await getApiKey('openai'));
     setGoogle(await getApiKey('google'));
@@ -66,6 +69,15 @@ export default function Settings() {
                   style={styles.input}
                 />
                 <Text style={styles.helper}>Unlock Gemini 2.5 Pro and other Google models.</Text>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Apple Intelligence</Text>
+                <Text style={styles.helper}>
+                  {appleAvailable
+                    ? 'Available on this device. No API key required.'
+                    : 'Requires an Apple Intelligence capable device; no API key needed when available.'}
+                </Text>
               </View>
 
               <Pressable

@@ -1,15 +1,20 @@
-import { PROVIDERS } from '@/src/lib/ai/models';
+import type { ProviderDefinition } from '@/src/lib/ai/models';
+import { findFirstTextModel, providersToMap, useAvailableProviders } from '@/src/lib/ai/models';
 import { createChat, deleteChat, listChats } from '@/src/lib/db/chat';
 import type { Chat } from '@/src/types';
 import { FlashList } from '@shopify/flash-list';
-import { Link, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Link, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { Extrapolate, interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
 export default function Home() {
+  const router = useRouter();
+  const providers = useAvailableProviders();
+  const providerMap = useMemo(() => providersToMap(providers), [providers]);
+  const defaultModel = useMemo(() => findFirstTextModel(providers), [providers]);
   const [chats, setChats] = useState<Chat[]>([]);
 
   const refreshChats = useCallback(async () => {
@@ -26,10 +31,11 @@ export default function Home() {
   );
 
   async function newChat() {
-    const provider: 'openai'|'google' = 'openai';
-    const model = PROVIDERS[provider].models[0].id;
-    await createChat({ provider, model, title: 'New Chat' });
-    await refreshChats();
+    const fallback = { provider: 'openai' as Chat['provider'], model: 'gpt-5' };
+    const selection = defaultModel ?? fallback;
+    const chat = await createChat({ provider: selection.provider, model: selection.model, title: 'New Chat' });
+    refreshChats();
+    router.push({ pathname: '/chat/[id]', params: { id: chat.id } });
   }
 
   const handleDelete = useCallback(async (chatId: string) => {
@@ -108,9 +114,11 @@ export default function Home() {
                         style={({ pressed }) => [styles.chatCard, pressed && styles.chatCardPressed]}
                       >
                         <View style={styles.chatCardHeader}>
-                          <Text style={styles.chatTitle}>{item.title || 'Untitled chat'}</Text>
-                          <Text style={styles.chatMeta}>{formatProviderLabel(item)}</Text>
+                          <Text style={styles.chatTitle} numberOfLines={1} ellipsizeMode="tail">
+                            {item.title || 'Untitled chat'}
+                          </Text>
                         </View>
+                        <Text style={styles.chatMeta}>{formatProviderLabel(item, providerMap)}</Text>
                         <Text style={styles.chatTimestamp}>Updated {formatTimestamp(item.updatedAt)}</Text>
                       </Pressable>
                     </Link>
@@ -154,9 +162,16 @@ function DeleteSwipeAction({ progress, dragX, onDelete }: DeleteSwipeActionProps
   );
 }
 
-function formatProviderLabel(chat: Chat) {
-  const providerName = chat.provider === 'openai' ? 'OpenAI' : 'Google';
-  return `${providerName} · ${chat.model}`;
+function formatProviderLabel(
+  chat: Chat,
+  providerMap: Map<Chat['provider'], ProviderDefinition>
+) {
+  const provider = providerMap.get(chat.provider);
+  if (!provider) {
+    return `${chat.provider} · ${chat.model}`;
+  }
+  const model = provider.models.find((m) => m.id === chat.model);
+  return `${provider.label} · ${model?.label ?? chat.model}`;
 }
 
 function formatTimestamp(timestamp: number) {
@@ -296,13 +311,9 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.99 }],
   },
   chatCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginVertical: 10,
+    marginBottom: 6,
   },
   chatTitle: {
-    flex: 1,
     fontSize: 18,
     fontWeight: '600',
     color: '#0F172A',
@@ -310,7 +321,7 @@ const styles = StyleSheet.create({
   chatMeta: {
     fontSize: 13,
     color: ACCENT,
-    marginLeft: 12,
+    fontWeight: '600',
   },
   chatTimestamp: {
     fontSize: 14,

@@ -1,12 +1,11 @@
+import { apple } from '@react-native-ai/apple';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { generateText, streamText } from 'ai';
 import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
-import type { Message } from '../../types';
-
-type ProviderId = 'openai' | 'google';
+import type { Message, ProviderId } from '../../types';
 
 type NormalizedMessage = { role: Message['role']; content: string };
 
@@ -21,6 +20,13 @@ function getModel(provider: ProviderId, model: string, apiKey: string) {
   if (provider === 'google') {
     const client = createGoogleGenerativeAI({ apiKey, fetch: fetchImpl });
     return client(model);
+  }
+
+  if (provider === 'apple') {
+    if (typeof apple?.isAvailable === 'function' && !apple.isAvailable()) {
+      throw new Error('Apple Intelligence is not available on this device.');
+    }
+    return apple();
   }
 
   throw new Error('Unsupported provider');
@@ -75,6 +81,9 @@ export async function generateImageFromPrompt(options: {
   apiKey: string;
 }) {
   const { provider, model, prompt, apiKey } = options;
+  if (provider === 'apple') {
+    throw new Error('Image generation is not supported by Apple Intelligence.');
+  }
   const result = await generateText({
     model: getModel(provider, model, apiKey),
     prompt,

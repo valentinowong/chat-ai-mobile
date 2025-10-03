@@ -1,9 +1,11 @@
 export type Role = 'system' | 'user' | 'assistant';
 
+export type ProviderId = 'openai' | 'google' | 'apple';
+
 export type Chat = {
   id: string;
   title: string;
-  provider: 'openai' | 'google';
+  provider: ProviderId;
   model: string; // e.g. 'gpt-4o' or 'gemini-1.5-pro'
   createdAt: number;
   updatedAt: number;

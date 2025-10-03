@@ -1,6 +1,11 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { PROVIDERS, type ProviderId, type ProviderModel } from '../lib/ai/models';
+import type { ProviderId } from '../types';
+import {
+  ProviderModel,
+  providersToMap,
+  useAvailableProviders,
+} from '../lib/ai/models';
 import { BottomSheetModal, type BottomSheetModalRef } from './BottomSheetModal';
 
 type PickerValue = { provider: ProviderId; model: string };
@@ -22,6 +27,8 @@ export function ModelPicker({
 }: Props) {
   const modalRef = useRef<BottomSheetModalRef>(null);
   const [query, setQuery] = useState('');
+  const providers = useAvailableProviders();
+  const providerMap = useMemo(() => providersToMap(providers), [providers]);
 
   const open = useCallback(() => {
     if (Platform.OS === 'web') {
@@ -43,11 +50,11 @@ export function ModelPicker({
   const [webOpen, setWebOpen] = useState(false);
 
   const currentLabel = useMemo(() => {
-    const provider = PROVIDERS[value?.provider as ProviderId];
+    const provider = value?.provider ? providerMap.get(value.provider) : undefined;
     const model = provider?.models.find(m => m.id === value?.model);
     if (model) return model.label;
     return placeholderText;
-  }, [value, placeholderText]);
+  }, [value, placeholderText, providerMap]);
 
   const describeModel = useCallback((model: ProviderModel) => {
     const suffix = model.kind === 'image' ? ' · Image generation' : '';
@@ -60,23 +67,23 @@ export function ModelPicker({
       | { kind: 'header'; id: string; text: string }
       | { kind: 'item'; id: string; provider: ProviderId; model: ProviderModel; text: string }
     )[] = [];
-    (Object.keys(PROVIDERS) as ProviderId[]).forEach((pid) => {
-      const p = PROVIDERS[pid];
-      const filtered = p.models.filter(
+    providers.forEach((provider) => {
+      const filtered = provider.models.filter(
         (m) =>
           !q ||
           m.label.toLowerCase().includes(q) ||
           m.id.toLowerCase().includes(q) ||
-          p.label.toLowerCase().includes(q) ||
+          provider.label.toLowerCase().includes(q) ||
           (m.kind === 'image' && 'image'.includes(q))
       );
       if (filtered.length > 0) {
-        entries.push({ kind: 'header', id: `h:${pid}`, text: p.label });
+        entries.push({ kind: 'header', id: `h:${provider.id}`, text: provider.label });
         filtered.forEach((m) => {
+          const rowId = `${provider.id}:${m.id}`;
           entries.push({
             kind: 'item',
-            id: `${pid}:${m.id}`,
-            provider: pid,
+            id: rowId,
+            provider: provider.id,
             model: m,
             text: describeModel(m),
           });
@@ -84,7 +91,7 @@ export function ModelPicker({
       }
     });
     return entries;
-  }, [describeModel, query]);
+  }, [describeModel, providers, query]);
 
   function select(provider: ProviderId, modelId: string) {
     onChange({ provider, model: modelId });
