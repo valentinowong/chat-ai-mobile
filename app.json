@@ -4,7 +4,7 @@
     "slug": "chat-ai-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/chat-ai-mobile-icon.png",
     "scheme": "chataimobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

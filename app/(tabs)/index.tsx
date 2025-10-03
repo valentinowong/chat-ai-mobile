@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { Extrapolate, interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
 export default function Home() {
   const [chats, setChats] = useState<Chat[]>([]);
@@ -91,15 +92,12 @@ export default function Home() {
                 <View style={[styles.chatItem, isLast && styles.chatItemLast]}>
                   <Swipeable
                     ref={(ref) => { swipeRef = ref; }}
-                    renderRightActions={() => (
-                      <View style={styles.deleteActionContainer}>
-                        <Pressable
-                          onPress={onDelete}
-                          style={({ pressed }) => [styles.deleteAction, pressed && styles.deleteActionPressed]}
-                        >
-                          <Text style={styles.deleteActionText}>Delete</Text>
-                        </Pressable>
-                      </View>
+                    renderRightActions={(progress, dragX) => (
+                      <DeleteSwipeAction
+                        progress={progress as SharedValue<number>}
+                        dragX={dragX as SharedValue<number>}
+                        onDelete={onDelete}
+                      />
                     )}
                   >
                     <Link
@@ -125,6 +123,34 @@ export default function Home() {
         </View>
       </View>
     </SafeAreaView>
+  );
+}
+
+type DeleteSwipeActionProps = {
+  progress: SharedValue<number>;
+  dragX: SharedValue<number>;
+  onDelete: () => void;
+};
+
+function DeleteSwipeAction({ progress, dragX, onDelete }: DeleteSwipeActionProps) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(progress.value, [0, 0.4, 1], [0, 0.5, 1], Extrapolate.CLAMP);
+    const scale = interpolate(dragX.value, [-140, -80, 0], [1, 0.98, 0.85], Extrapolate.CLAMP);
+    return {
+      opacity,
+      transform: [{ scale }],
+    };
+  });
+
+  return (
+    <Animated.View style={[styles.deleteActionWrapper, animatedStyle]}>
+      <Pressable
+        onPress={onDelete}
+        style={({ pressed }) => [styles.deleteAction, pressed && styles.deleteActionPressed]}
+      >
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -290,23 +316,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#475569',
   },
-  deleteActionContainer: {
+  deleteActionWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 12,
-    paddingRight: 20,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(220, 38, 38, 0.08)',
+    borderTopLeftRadius: 24,
+    borderBottomLeftRadius: 24,
   },
   deleteAction: {
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 96,
     backgroundColor: '#DC2626',
-    borderRadius: 20,
+    borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 3,
   },
   deleteActionPressed: {
     opacity: 0.85,
+    transform: [{ scale: 0.97 }],
   },
   deleteActionText: {
     color: '#FFFFFF',
