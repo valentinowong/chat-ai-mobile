@@ -1,5 +1,5 @@
 import { useAvailableProviders } from '@/src/lib/ai/models';
-import { getApiKey, setApiKey } from '@/src/lib/storage/keys';
+import { getApiKey, getCustomSearchCx, getCustomSearchKey, setApiKey, setCustomSearchCx, setCustomSearchKey } from '@/src/lib/storage/keys';
 import { useEffect, useState } from 'react';
 import {
   Alert,
@@ -15,16 +15,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function Settings() {
   const [openai, setOpenAI] = useState('');
   const [google, setGoogle] = useState('');
+  const [customSearchKey, setCustomSearchKeyState] = useState('');
+  const [customSearchCx, setCustomSearchCxState] = useState('');
   const providers = useAvailableProviders();
   const appleAvailable = providers.some((provider) => provider.id === 'apple');
   useEffect(() => { (async () => {
     setOpenAI(await getApiKey('openai'));
     setGoogle(await getApiKey('google'));
+    setCustomSearchKeyState(await getCustomSearchKey());
+    setCustomSearchCxState(await getCustomSearchCx());
   })(); }, []);
 
   async function save() {
     await setApiKey('openai', openai.trim());
     await setApiKey('google', google.trim());
+    await setCustomSearchKey(customSearchKey.trim());
+    await setCustomSearchCx(customSearchCx.trim());
     Alert.alert('Saved');
   }
 
@@ -69,6 +75,34 @@ export default function Settings() {
                   style={styles.input}
                 />
                 <Text style={styles.helper}>Unlock Gemini 2.5 Pro and other Google models.</Text>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Google Custom Search API Key</Text>
+                <TextInput
+                  placeholder="AIza..."
+                  placeholderTextColor="rgba(148, 163, 184, 0.7)"
+                  value={customSearchKey}
+                  onChangeText={setCustomSearchKeyState}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+                <Text style={styles.helper}>Used for web search queries. Provide your Google Custom Search API key.</Text>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Google Custom Search Engine ID (cx)</Text>
+                <TextInput
+                  placeholder="search-engine-id"
+                  placeholderTextColor="rgba(148, 163, 184, 0.7)"
+                  value={customSearchCx}
+                  onChangeText={setCustomSearchCxState}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+                <Text style={styles.helper}>Enter the programmable search engine identifier (cx) that indexes the web.</Text>
               </View>
 
               <View style={styles.fieldGroup}>

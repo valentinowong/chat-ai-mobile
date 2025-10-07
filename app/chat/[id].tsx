@@ -1,8 +1,10 @@
 import { generateImageFromPrompt, streamReply } from '@/src/lib/ai/clients';
 import { isImageModel, providerRequiresApiKey, useAvailableProviders } from '@/src/lib/ai/models';
+import { parseSearchDirectives, searchGoogleCustom } from '@/src/lib/ai/webSearch';
 import { addMessage, deleteMessage, getChat, listMessages, updateChatModel, updateChatTitle, updateMessageContent } from '@/src/lib/db/chat';
+import { randomUUID } from 'expo-crypto';
 import { File } from 'expo-file-system';
-import { getApiKey } from '@/src/lib/storage/keys';
+import { getApiKey, getCustomSearchCx, getCustomSearchKey } from '@/src/lib/storage/keys';
 import type { Chat, Message } from '@/src/types';
 import { InputBar } from '@/src/ui/InputBar';
 import { MessageList } from '@/src/ui/MessageList';
@@ -61,14 +63,19 @@ export default function ChatScreen() {
     const provider = selection?.provider ?? chat.provider;
     const model = selection?.model ?? chat.model;
     const imageModelSelected = isImageModel(provider, model, providers);
+    const { sanitized, queries } = parseSearchDirectives(trimmed);
+    const fallbackContent = queries.length
+      ? queries.map((query) => `Web search requested for: ${query}`).join('\n')
+      : trimmed;
+    const userContent = sanitized.length > 0 ? sanitized : fallbackContent;
     setIsSending(true);
     try {
-      const user = await addMessage(chat.id, 'user', trimmed);
+      const user = await addMessage(chat.id, 'user', userContent);
       setMessages(prev => [...prev, user]);
 
       const shouldRename = !chat.title?.trim() || chat.title === 'New Chat';
       if (shouldRename) {
-        const derivedTitle = deriveChatTitleFromMessage(trimmed);
+        const derivedTitle = deriveChatTitleFromMessage(userContent);
         if (derivedTitle) {
           try {
             const renamed = await updateChatTitle(chat.id, derivedTitle);
@@ -79,12 +86,60 @@ export default function ChatScreen() {
         }
       }
 
+      let searchMessages: Message[] = [];
+      if (queries.length) {
+        const customSearchKey = await getCustomSearchKey();
+        const customSearchCx = await getCustomSearchCx();
+        if (!customSearchKey || !customSearchCx) {
+          console.warn('[WebSearch] Missing Google Custom Search credentials; skipping search.');
+        }
+        const results = customSearchKey && customSearchCx ? await Promise.all(
+          queries.map(async (query) => {
+            try {
+              const result = await searchGoogleCustom(query, {
+                apiKey: customSearchKey,
+                cx: customSearchCx,
+                fetchPages: true,
+                maxPages: 3,
+              });
+              if (__DEV__) {
+                console.log('[WebSearch] Summary', result.summary);
+                console.log('[WebSearch] Pages', result.pages);
+              }
+              const pageSummaries = result.pages
+                .map((page, index) => `Page ${index + 1}: ${page.title}\nURL: ${page.url}\nContent: ${page.content}`)
+                .join('\n\n');
+              return `${result.summary}\n\n${pageSummaries}`.trim();
+            } catch (err: any) {
+              const reason = err?.message ?? String(err);
+              return `Web search for "${query}" failed: ${reason}`;
+            }
+          })
+        ) : [];
+        const now = Date.now();
+        searchMessages = results
+          .filter((content) => content && content.trim())
+          .map((content, index) => ({
+            id: `search-${randomUUID()}`,
+            chatId: chat.id,
+            role: 'system' as const,
+            content,
+            createdAt: now + index,
+          }));
+
+        if (searchMessages.length) {
+          setMessages(prev => [...prev, ...searchMessages]);
+        }
+      }
+
       const requiresKey = providerRequiresApiKey(provider, providers);
       const key = requiresKey ? await getApiKey(provider) : '';
       if (requiresKey && !key) {
         Alert.alert('Missing API key', `Add your ${provider} key in Settings`);
         return;
       }
+
+      const historyForModel = [...messages, ...searchMessages, user];
 
       const assistant = await addMessage(chat.id, 'assistant', '');
       setMessages(prev => [...prev, { ...assistant }]);
@@ -93,7 +148,7 @@ export default function ChatScreen() {
         const image = await generateImageFromPrompt({
           provider,
           model,
-          prompt: trimmed,
+          prompt: userContent,
           apiKey: key,
         });
 
@@ -114,7 +169,7 @@ export default function ChatScreen() {
         provider,
         model,
         apiKey: key,
-        messages: [...messages, user].map(({ role, content }) => ({ role, content })),
+        messages: historyForModel.map(({ role, content }) => ({ role, content })),
         onToken: (chunk) => {
           acc += chunk;
           setMessages(prev => prev.map(m => m.id === assistant.id ? { ...m, content: acc } : m));
