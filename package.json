@@ -24,6 +24,7 @@
     "@shopify/flash-list": "2.0.2",
     "ai": "^5.0.47",
     "expo": "~54.0.10",
+    "expo-camera": "~17.0.8",
     "expo-clipboard": "~8.0.7",
     "expo-constants": "~18.0.9",
     "expo-crypto": "~15.0.7",
