@@ -1,6 +1,6 @@
 export type Role = 'system' | 'user' | 'assistant';
 
-export type ProviderId = 'openai' | 'google' | 'apple';
+export type ProviderId = 'openai' | 'google' | 'apple' | 'apple-sd';
 
 export type Chat = {
   id: string;

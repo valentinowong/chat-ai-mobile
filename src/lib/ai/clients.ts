@@ -6,6 +6,7 @@ import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
 import type { Message, ProviderId } from '../../types';
+import { generateStableDiffusionImage } from './stableDiffusion';
 
 type NormalizedMessage = { role: Message['role']; content: string };
 
@@ -81,6 +82,17 @@ export async function generateImageFromPrompt(options: {
   apiKey: string;
 }) {
   const { provider, model, prompt, apiKey } = options;
+  if (provider === 'apple-sd') {
+    const result = await generateStableDiffusionImage({ prompt });
+    let uri = result.uri ?? null;
+    if (!uri && result.base64) {
+      const base64 = result.base64.includes('base64,')
+        ? result.base64.split('base64,').pop() ?? ''
+        : result.base64;
+      uri = await saveImageToCache(base64, 'image/png');
+    }
+    return { uri, metadata: null, text: '' };
+  }
   if (provider === 'apple') {
     throw new Error('Image generation is not supported by Apple Intelligence.');
   }

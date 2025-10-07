@@ -1,5 +1,6 @@
 import { generateImageFromPrompt, streamReply } from '@/src/lib/ai/clients';
 import { isImageModel, providerRequiresApiKey, useAvailableProviders } from '@/src/lib/ai/models';
+import { isStableDiffusionNativeModulePresent } from '@/src/lib/ai/stableDiffusion';
 import { addMessage, deleteMessage, getChat, listMessages, updateChatModel, updateChatTitle, updateMessageContent } from '@/src/lib/db/chat';
 import { File } from 'expo-file-system';
 import { getApiKey } from '@/src/lib/storage/keys';
@@ -37,6 +38,12 @@ export default function ChatScreen() {
     if (!chat) return;
     setSelection({ provider: chat.provider, model: chat.model });
   }, [chat]);
+
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('[StableDiffusion] native module present:', isStableDiffusionNativeModulePresent());
+    }
+  }, []);
 
   const handleModelChange = useCallback(async (next: { provider: Chat['provider']; model: string }) => {
     if (!chat || isUpdatingModel) return;

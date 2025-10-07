@@ -1,5 +1,6 @@
 import type { ProviderDefinition } from '@/src/lib/ai/models';
 import { findFirstTextModel, providersToMap, useAvailableProviders } from '@/src/lib/ai/models';
+import { isStableDiffusionNativeModulePresent } from '@/src/lib/ai/stableDiffusion';
 import { createChat, deleteChat, listChats } from '@/src/lib/db/chat';
 import type { Chat } from '@/src/types';
 import { FlashList } from '@shopify/flash-list';
@@ -15,6 +16,12 @@ export default function Home() {
   const providers = useAvailableProviders();
   const providerMap = useMemo(() => providersToMap(providers), [providers]);
   const defaultModel = useMemo(() => findFirstTextModel(providers), [providers]);
+
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('[StableDiffusion] native module present:', isStableDiffusionNativeModulePresent());
+    }
+  }, []);
   const [chats, setChats] = useState<Chat[]>([]);
 
   const refreshChats = useCallback(async () => {

@@ -12,7 +12,13 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.valentino.wong.chataimobile",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "UISupportsDocumentBrowser": true
+      },
+      "entitlements": {
+        "com.apple.developer.kernel.increased-memory-limit": true
       }
     },
     "android": {
@@ -41,6 +47,33 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0"
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share images."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "The app accesses your camera to let you take pictures."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "The app accesses your photos to let you share images.",
+          "savePhotosPermission": "The app saves photos to your photo library."
         }
       ],
       "expo-sqlite",

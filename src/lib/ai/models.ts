@@ -2,6 +2,7 @@ import { apple } from '@react-native-ai/apple';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import type { ProviderId } from '../../types';
+import { isStableDiffusionAvailable } from './stableDiffusion';
 
 export type ModelKind = 'text' | 'image';
 
@@ -43,6 +44,19 @@ const APPLE_PROVIDER: ProviderDefinition = {
   models: [{ id: 'system-default', label: 'Apple Intelligence (On Device)', kind: 'text' }],
 };
 
+const APPLE_SD_PROVIDER: ProviderDefinition = {
+  id: 'apple-sd',
+  label: 'Apple Stable Diffusion',
+  requiresApiKey: false,
+  models: [
+    {
+      id: 'stable-diffusion-coreml',
+      label: 'Stable Diffusion (On Device)',
+      kind: 'image',
+    },
+  ],
+};
+
 const CORE_PROVIDERS: ProviderDefinition[] = [OPENAI_PROVIDER, GOOGLE_PROVIDER];
 
 let cachedProviders: ProviderDefinition[] | null = null;
@@ -51,6 +65,9 @@ async function detectProviders(): Promise<ProviderDefinition[]> {
   const providers: ProviderDefinition[] = [...CORE_PROVIDERS];
   if (await isAppleAvailable()) {
     providers.push(APPLE_PROVIDER);
+  }
+  if (await isStableDiffusionAvailable()) {
+    providers.push(APPLE_SD_PROVIDER);
   }
   return providers;
 }
