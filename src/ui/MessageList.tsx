@@ -4,7 +4,7 @@ import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native
 import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
-import { File } from 'expo-file-system';
+import { File, cacheDirectory, documentDirectory } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Message } from '../types';
@@ -99,7 +99,8 @@ export function MessageList({ messages, onRequestDelete }: MessageListProps) {
       }
       const extension = match[1]?.toLowerCase?.() ?? 'png';
       const data = match[2];
-      tempFileUri = `${FileSystem.cacheDirectory}chat-image-${Date.now()}.${extension}`;
+      const baseCacheDir = cacheDirectory ?? documentDirectory ?? '';
+      tempFileUri = `${baseCacheDir}chat-image-${Date.now()}.${extension}`;
       try {
         const file = new File(tempFileUri);
         if (!file.exists) {
