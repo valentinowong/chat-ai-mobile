@@ -1,7 +1,7 @@
 import { apple } from '@react-native-ai/apple';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
-import { generateText, streamText } from 'ai';
+import { experimental_generateImage as generateImage, generateText, streamText } from 'ai';
 import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
@@ -84,8 +84,26 @@ export async function generateImageFromPrompt(options: {
   if (provider === 'apple') {
     throw new Error('Image generation is not supported by Apple Intelligence.');
   }
+  if (provider === 'openai') {
+    const client = createOpenAI({ apiKey, fetch: fetchImpl });
+    const resolvedModel = client.image(model);
+    const result = await generateImage({
+      model: resolvedModel,
+      prompt,
+    });
+
+    const file = result.image;
+    if (!file?.base64) {
+      return { uri: null as string | null, metadata: result, text: '' };
+    }
+
+    const uri = await saveImageToCache(file.base64, file.mediaType ?? 'image/png');
+    return { uri, metadata: result, text: '' };
+  }
+
+  const resolvedModel = getModel(provider, model, apiKey);
   const result = await generateText({
-    model: getModel(provider, model, apiKey),
+    model: resolvedModel,
     prompt,
   });
 

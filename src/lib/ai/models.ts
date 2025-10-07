@@ -22,6 +22,7 @@ const OPENAI_PROVIDER: ProviderDefinition = {
     { id: 'gpt-5', label: 'GPT-5', kind: 'text' },
     { id: 'gpt-5-mini', label: 'GPT-5 Mini', kind: 'text' },
     { id: 'gpt-5-nano', label: 'GPT-5 Nano', kind: 'text' },
+    { id: 'gpt-image-1', label: 'GPT Image 1', kind: 'image' },
   ],
 };
 
