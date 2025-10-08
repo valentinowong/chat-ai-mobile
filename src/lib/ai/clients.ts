@@ -4,6 +4,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { experimental_generateImage as generateImage, generateText, streamText } from 'ai';
 import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import { fetch as expoFetch } from 'expo/fetch';
 import type { Message, ProviderId } from '../../types';
 
@@ -79,7 +81,7 @@ export async function generateImageFromPrompt(options: {
   model: string;
   prompt: string;
   apiKey: string;
-  images?: { base64: string; mediaType?: string }[];
+  images?: { base64: string; mediaType?: string; uri?: string | null }[];
 }) {
   const { provider, model, prompt, apiKey, images = [] } = options;
   if (provider === 'apple') {
@@ -87,6 +89,14 @@ export async function generateImageFromPrompt(options: {
   }
   if (provider === 'openai') {
     const client = createOpenAI({ apiKey, fetch: fetchImpl });
+    if (images.length > 0) {
+      return await editOpenAIImage({
+        apiKey,
+        prompt,
+        image: images[0],
+      });
+    }
+
     const resolvedModel = client.image(model);
     const result = await generateImage({
       model: resolvedModel,
@@ -212,4 +222,75 @@ export async function saveImageToCache(base64: string, mediaType: string) {
 
   file.write(base64, { encoding: 'base64' });
   return file.uri;
+}
+
+async function editOpenAIImage(options: {
+  apiKey: string;
+  prompt: string;
+  image: { base64: string; mediaType?: string; uri?: string | null };
+}) {
+  const { apiKey, prompt, image } = options;
+
+  let sourceUri = image.uri ?? null;
+  let mediaType = image.mediaType ?? 'image/png';
+  if (!sourceUri) {
+    sourceUri = await saveImageToCache(image.base64, mediaType);
+  }
+  if (!sourceUri) {
+    throw new Error('No image data available for OpenAI image editing.');
+  }
+
+  const allowedMediaTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  if (!allowedMediaTypes.has(mediaType)) {
+    const converted = await ImageManipulator.manipulateAsync(
+      sourceUri,
+      [],
+      { compress: 1, format: ImageManipulator.SaveFormat.PNG }
+    );
+    sourceUri = converted.uri;
+    mediaType = 'image/png';
+  }
+
+  const parameters: Record<string, string> = {
+    model: 'gpt-image-1',
+  };
+  const trimmedPrompt = prompt.trim();
+  if (trimmedPrompt.length > 0) {
+    parameters.prompt = trimmedPrompt;
+  }
+
+  const uploadResult = await LegacyFileSystem.uploadAsync('https://api.openai.com/v1/images/edits', sourceUri, {
+    httpMethod: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    fieldName: 'image',
+    parameters,
+    mimeType: mediaType,
+    uploadType: LegacyFileSystem.FileSystemUploadType.MULTIPART,
+  });
+
+  if (uploadResult.status !== 200) {
+    let message = `OpenAI image edit failed with status ${uploadResult.status}`;
+    try {
+      const payload = JSON.parse(uploadResult.body ?? '');
+      if (payload?.error?.message) {
+        message = payload.error.message;
+      }
+    } catch {
+      if (uploadResult.body) {
+        message = uploadResult.body;
+      }
+    }
+    throw new Error(message);
+  }
+
+  const payload = JSON.parse(uploadResult.body ?? '{}');
+  const base64 = payload?.data?.[0]?.b64_json;
+  if (!base64) {
+    return { uri: null as string | null, metadata: payload, text: '' };
+  }
+
+  const resultUri = await saveImageToCache(base64, 'image/png');
+  return { uri: resultUri, metadata: payload, text: '' };
 }

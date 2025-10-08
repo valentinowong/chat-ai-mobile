@@ -63,17 +63,21 @@ export default function ChatScreen() {
     const model = selection?.model ?? chat.model;
     const imageModelSelected = isImageModel(provider, model, providers);
     const referenceImages = attachments.filter((attachment) => attachment.base64.length > 0);
+    const limitedReferenceImages =
+      provider === 'openai' && model === 'gpt-image-1' ? referenceImages.slice(0, 1) : referenceImages;
+    const referenceUploads: { base64: string; mimeType: string; uri: string | null }[] = [];
     setIsSending(true);
     try {
       const user = await addMessage(chat.id, 'user', trimmed);
       const createdMessages: Message[] = [user];
 
-      if (referenceImages.length > 0) {
-        for (const attachment of referenceImages) {
+      if (limitedReferenceImages.length > 0) {
+        for (const attachment of limitedReferenceImages) {
           try {
             const uri = await saveImageToCache(attachment.base64, attachment.mimeType);
             const imageMessage = await addMessage(chat.id, 'user', uri);
             createdMessages.push(imageMessage);
+            referenceUploads.push({ base64: attachment.base64, mimeType: attachment.mimeType, uri });
           } catch (err) {
             console.warn('Failed to cache attachment image', err);
           }
@@ -113,8 +117,8 @@ export default function ChatScreen() {
           model,
           prompt: trimmed,
           apiKey: key,
-          images: referenceImages.length
-            ? referenceImages.map((item) => ({ base64: item.base64, mediaType: item.mimeType }))
+          images: referenceUploads.length
+            ? referenceUploads.map((item) => ({ base64: item.base64, mediaType: item.mimeType, uri: item.uri }))
             : undefined,
         });
 
@@ -183,16 +187,22 @@ export default function ChatScreen() {
     ]);
   }, []);
 
-  const allowImageAttachments = useMemo(() => {
+  const attachmentConfig = useMemo(() => {
     const provider = selection?.provider ?? chat?.provider ?? null;
     const model = selection?.model ?? chat?.model ?? null;
     if (!provider || !model) {
-      return false;
+      return { allow: false, max: undefined } as const;
     }
-    if (provider !== 'google') {
-      return false;
+    if (!isImageModel(provider, model, providers)) {
+      return { allow: false, max: undefined } as const;
     }
-    return isImageModel(provider, model, providers);
+    if (provider === 'google') {
+      return { allow: true, max: 3 } as const;
+    }
+    if (provider === 'openai' && model === 'gpt-image-1') {
+      return { allow: true, max: 1 } as const;
+    }
+    return { allow: false, max: undefined } as const;
   }, [selection, chat?.provider, chat?.model, providers]);
 
   return (
@@ -217,7 +227,12 @@ export default function ChatScreen() {
         </View>
         <View style={styles.conversation}>
           <MessageList messages={messages} onRequestDelete={handleMessageDeleteRequest} />
-          <InputBar onSend={send} disabled={isSending} allowImageAttachments={allowImageAttachments} />
+          <InputBar
+            onSend={send}
+            disabled={isSending}
+            allowImageAttachments={attachmentConfig.allow}
+            maxAttachments={attachmentConfig.max}
+          />
         </View>
       </View>
     </SafeAreaView>

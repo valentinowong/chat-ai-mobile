@@ -29,7 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const ACCENT = '#2563EB';
 const RECORDING = '#DC2626';
 
-const MAX_REFERENCE_IMAGES = 3;
+const DEFAULT_MAX_REFERENCE_IMAGES = 3;
 
 export type ImageAttachmentPayload = {
   uri: string;
@@ -43,12 +43,14 @@ type InputBarProps = {
   onSend: (payload: { text: string; attachments: ImageAttachmentPayload[] }) => void;
   disabled?: boolean;
   allowImageAttachments?: boolean;
+  maxAttachments?: number;
 };
 
 export function InputBar({
   onSend,
   disabled,
   allowImageAttachments = false,
+  maxAttachments = DEFAULT_MAX_REFERENCE_IMAGES,
 }: InputBarProps) {
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
@@ -102,7 +104,8 @@ export function InputBar({
 
   const trimmed = text.trim();
   const isDisabled = disabled || trimmed.length === 0;
-  const attachmentButtonDisabled = !allowImageAttachments || attachments.length >= MAX_REFERENCE_IMAGES;
+  const maxAttachmentCount = Math.max(1, maxAttachments ?? DEFAULT_MAX_REFERENCE_IMAGES);
+  const attachmentButtonDisabled = !allowImageAttachments || attachments.length >= maxAttachmentCount;
 
   const appendTranscription = useCallback((transcript: string) => {
     setText((current) => {
@@ -131,8 +134,8 @@ export function InputBar({
     if (!allowImageAttachments) {
       return;
     }
-    if (attachments.length >= MAX_REFERENCE_IMAGES) {
-      Alert.alert('Attachment limit reached', `You can attach up to ${MAX_REFERENCE_IMAGES} images.`);
+    if (attachments.length >= maxAttachmentCount) {
+      Alert.alert('Attachment limit reached', `You can attach up to ${maxAttachmentCount} image${maxAttachmentCount === 1 ? '' : 's'}.`);
       return;
     }
 
@@ -154,7 +157,7 @@ export function InputBar({
         return;
       }
 
-      const remaining = MAX_REFERENCE_IMAGES - attachments.length;
+      const remaining = maxAttachmentCount - attachments.length;
       const selected = (result.assets ?? []).slice(0, remaining);
       const next: ImageAttachmentDraft[] = [];
 
@@ -188,7 +191,7 @@ export function InputBar({
 
       setAttachments((current) => {
         const combined = [...current, ...next];
-        return combined.slice(0, MAX_REFERENCE_IMAGES);
+        return combined.slice(0, maxAttachmentCount);
       });
     } catch (err: any) {
       console.warn('Failed to pick image', err);
