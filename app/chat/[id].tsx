@@ -1,15 +1,15 @@
-import { generateImageFromPrompt, streamReply } from '@/src/lib/ai/clients';
+import { generateImageFromPrompt, saveImageToCache, streamReply } from '@/src/lib/ai/clients';
 import { isImageModel, providerRequiresApiKey, useAvailableProviders } from '@/src/lib/ai/models';
 import { addMessage, deleteMessage, getChat, listMessages, updateChatModel, updateChatTitle, updateMessageContent } from '@/src/lib/db/chat';
-import { File } from 'expo-file-system';
 import { getApiKey } from '@/src/lib/storage/keys';
 import type { Chat, Message } from '@/src/types';
-import { InputBar } from '@/src/ui/InputBar';
+import { InputBar, type ImageAttachmentPayload } from '@/src/ui/InputBar';
 import { MessageList } from '@/src/ui/MessageList';
 import { ModelPicker } from '@/src/ui/ModelPicker';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { File } from 'expo-file-system';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -54,17 +54,35 @@ export default function ChatScreen() {
     }
   }, [chat, isUpdatingModel, selection]);
 
-  async function send(text: string) {
+  async function send({ text, attachments }: { text: string; attachments: ImageAttachmentPayload[] }) {
     if (!chat || isSending) return;
     const trimmed = text.trim();
     if (!trimmed) return;
+    const baseHistory = [...messages];
     const provider = selection?.provider ?? chat.provider;
     const model = selection?.model ?? chat.model;
     const imageModelSelected = isImageModel(provider, model, providers);
+    const referenceImages = attachments.filter((attachment) => attachment.base64.length > 0);
     setIsSending(true);
     try {
       const user = await addMessage(chat.id, 'user', trimmed);
-      setMessages(prev => [...prev, user]);
+      const createdMessages: Message[] = [user];
+
+      if (referenceImages.length > 0) {
+        for (const attachment of referenceImages) {
+          try {
+            const uri = await saveImageToCache(attachment.base64, attachment.mimeType);
+            const imageMessage = await addMessage(chat.id, 'user', uri);
+            createdMessages.push(imageMessage);
+          } catch (err) {
+            console.warn('Failed to cache attachment image', err);
+          }
+        }
+      }
+
+      setMessages((prev) => [...prev, ...createdMessages]);
+
+      const historyWithUser = [...baseHistory, ...createdMessages];
 
       const shouldRename = !chat.title?.trim() || chat.title === 'New Chat';
       if (shouldRename) {
@@ -95,6 +113,9 @@ export default function ChatScreen() {
           model,
           prompt: trimmed,
           apiKey: key,
+          images: referenceImages.length
+            ? referenceImages.map((item) => ({ base64: item.base64, mediaType: item.mimeType }))
+            : undefined,
         });
 
         if (image.uri) {
@@ -114,7 +135,7 @@ export default function ChatScreen() {
         provider,
         model,
         apiKey: key,
-        messages: [...messages, user].map(({ role, content }) => ({ role, content })),
+        messages: historyWithUser.map(({ role, content }) => ({ role, content })),
         onToken: (chunk) => {
           acc += chunk;
           setMessages(prev => prev.map(m => m.id === assistant.id ? { ...m, content: acc } : m));
@@ -162,6 +183,18 @@ export default function ChatScreen() {
     ]);
   }, []);
 
+  const allowImageAttachments = useMemo(() => {
+    const provider = selection?.provider ?? chat?.provider ?? null;
+    const model = selection?.model ?? chat?.model ?? null;
+    if (!provider || !model) {
+      return false;
+    }
+    if (provider !== 'google') {
+      return false;
+    }
+    return isImageModel(provider, model, providers);
+  }, [selection, chat?.provider, chat?.model, providers]);
+
   return (
     <SafeAreaView style={[styles.safeArea]} edges={['left', 'right']}>
       <View style={[styles.root, { paddingTop: headerHeight }] }>
@@ -184,7 +217,7 @@ export default function ChatScreen() {
         </View>
         <View style={styles.conversation}>
           <MessageList messages={messages} onRequestDelete={handleMessageDeleteRequest} />
-          <InputBar onSend={send} disabled={isSending} />
+          <InputBar onSend={send} disabled={isSending} allowImageAttachments={allowImageAttachments} />
         </View>
       </View>
     </SafeAreaView>

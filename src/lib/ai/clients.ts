@@ -79,8 +79,9 @@ export async function generateImageFromPrompt(options: {
   model: string;
   prompt: string;
   apiKey: string;
+  images?: { base64: string; mediaType?: string }[];
 }) {
-  const { provider, model, prompt, apiKey } = options;
+  const { provider, model, prompt, apiKey, images = [] } = options;
   if (provider === 'apple') {
     throw new Error('Image generation is not supported by Apple Intelligence.');
   }
@@ -99,6 +100,41 @@ export async function generateImageFromPrompt(options: {
 
     const uri = await saveImageToCache(file.base64, file.mediaType ?? 'image/png');
     return { uri, metadata: result, text: '' };
+  }
+
+  if (provider === 'google') {
+    const resolvedModel = getModel(provider, model, apiKey);
+    const userContent: Array<
+      | { type: 'text'; text: string }
+      | { type: 'image'; image: string; mediaType?: string }
+    > = [];
+
+    const trimmed = prompt.trim();
+    if (trimmed.length > 0) {
+      userContent.push({ type: 'text', text: trimmed });
+    }
+
+    for (const image of images) {
+      if (!image?.base64) continue;
+      userContent.push({ type: 'image', image: image.base64, mediaType: image.mediaType });
+    }
+
+    if (userContent.length === 0) {
+      userContent.push({ type: 'text', text: ' ' });
+    }
+
+    const result = await generateText({
+      model: resolvedModel,
+      messages: [{ role: 'user', content: userContent }],
+    });
+
+    const imageFile = result.files?.find((file) => file.mediaType?.startsWith('image/'));
+    if (!imageFile) {
+      return { uri: null as string | null, metadata: result, text: result.text ?? '' };
+    }
+
+    const uri = await saveImageToCache(imageFile.base64, imageFile.mediaType ?? 'image/png');
+    return { uri, metadata: result, text: result.text ?? '' };
   }
 
   const resolvedModel = getModel(provider, model, apiKey);
@@ -162,7 +198,7 @@ async function ensureImageDirectory(): Promise<Directory> {
   return ensureDirPromise;
 }
 
-async function saveImageToCache(base64: string, mediaType: string) {
+export async function saveImageToCache(base64: string, mediaType: string) {
   const directory = await ensureImageDirectory();
   const extension = mediaType.split('/')[1] ?? 'png';
   const filename = `${randomUUID()}.${extension}`;

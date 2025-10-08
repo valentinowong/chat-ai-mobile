@@ -2,6 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { apple } from '@react-native-ai/apple';
 import { experimental_transcribe as transcribe } from 'ai';
 import { File } from 'expo-file-system';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
+import { randomUUID } from 'expo-crypto';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RecordingPresets,
@@ -26,12 +29,33 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const ACCENT = '#2563EB';
 const RECORDING = '#DC2626';
 
-export function InputBar({ onSend, disabled }: { onSend: (t: string) => void; disabled?: boolean }) {
+const MAX_REFERENCE_IMAGES = 3;
+
+export type ImageAttachmentPayload = {
+  uri: string;
+  base64: string;
+  mimeType: string;
+};
+
+type ImageAttachmentDraft = ImageAttachmentPayload & { id: string };
+
+type InputBarProps = {
+  onSend: (payload: { text: string; attachments: ImageAttachmentPayload[] }) => void;
+  disabled?: boolean;
+  allowImageAttachments?: boolean;
+};
+
+export function InputBar({
+  onSend,
+  disabled,
+  allowImageAttachments = false,
+}: InputBarProps) {
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+  const [attachments, setAttachments] = useState<ImageAttachmentDraft[]>([]);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const showSpeechControl = isSpeechSupported;
   const recordingModeRef = useRef(false);
@@ -78,6 +102,7 @@ export function InputBar({ onSend, disabled }: { onSend: (t: string) => void; di
 
   const trimmed = text.trim();
   const isDisabled = disabled || trimmed.length === 0;
+  const attachmentButtonDisabled = !allowImageAttachments || attachments.length >= MAX_REFERENCE_IMAGES;
 
   const appendTranscription = useCallback((transcript: string) => {
     setText((current) => {
@@ -92,9 +117,84 @@ export function InputBar({ onSend, disabled }: { onSend: (t: string) => void; di
   function handleSend() {
     if (isDisabled) return;
     Keyboard.dismiss();
-    onSend(trimmed);
+    const payloadAttachments = attachments.map(({ base64, mimeType, uri }) => ({ base64, mimeType, uri }));
+    onSend({ text: trimmed, attachments: payloadAttachments });
     setText('');
+    setAttachments([]);
   }
+
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+  }, []);
+
+  const handlePickImages = useCallback(async () => {
+    if (!allowImageAttachments) {
+      return;
+    }
+    if (attachments.length >= MAX_REFERENCE_IMAGES) {
+      Alert.alert('Attachment limit reached', `You can attach up to ${MAX_REFERENCE_IMAGES} images.`);
+      return;
+    }
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Photos access needed', 'Enable access to the photo library to attach images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        base64: true,
+        quality: 1,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const remaining = MAX_REFERENCE_IMAGES - attachments.length;
+      const selected = (result.assets ?? []).slice(0, remaining);
+      const next: ImageAttachmentDraft[] = [];
+
+      for (const asset of selected) {
+        if (!asset?.uri) continue;
+
+        let base64 = asset.base64 ?? null;
+        if (!base64) {
+          try {
+            const file = new File(asset.uri);
+            const maybeBase64 = file.base64();
+            base64 = typeof maybeBase64 === 'string' ? maybeBase64 : await maybeBase64;
+          } catch (err) {
+            console.warn('Failed to read selected image', err);
+            base64 = null;
+          }
+        }
+
+        if (!base64) {
+          continue;
+        }
+
+        const mimeType = asset.mimeType ?? (asset.uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
+        next.push({ id: randomUUID(), uri: asset.uri, base64, mimeType });
+      }
+
+      if (next.length === 0) {
+        Alert.alert('Image unavailable', 'Could not read the selected image. Please try again.');
+        return;
+      }
+
+      setAttachments((current) => {
+        const combined = [...current, ...next];
+        return combined.slice(0, MAX_REFERENCE_IMAGES);
+      });
+    } catch (err: any) {
+      console.warn('Failed to pick image', err);
+      Alert.alert('Image selection failed', err?.message ?? 'Please try again.');
+    }
+  }, [allowImageAttachments, attachments.length]);
 
   const ensureRecordingPermissions = useCallback(async () => {
     try {
@@ -271,6 +371,23 @@ export function InputBar({ onSend, disabled }: { onSend: (t: string) => void; di
   return (
     <KeyboardStickyView offset={{ closed: -insets.bottom, opened: 0 }}>
       <View style={[styles.container, { paddingBottom: 12 }]}>
+        {allowImageAttachments && attachments.length > 0 ? (
+          <View style={styles.attachmentsRow}>
+            {attachments.map((attachment) => (
+              <View key={attachment.id} style={styles.attachmentThumbWrapper}>
+                <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} contentFit="cover" />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove image"
+                  onPress={() => handleRemoveAttachment(attachment.id)}
+                  style={styles.attachmentRemoveButton}
+                >
+                  <Ionicons name="close" size={14} color="#FFFFFF" />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : null}
         <View style={styles.inputRow}>
           {showSpeechControl ? (
             <Pressable
@@ -307,6 +424,25 @@ export function InputBar({ onSend, disabled }: { onSend: (t: string) => void; di
             blurOnSubmit
             onSubmitEditing={handleSend}
           />
+          {allowImageAttachments ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Attach reference image"
+              onPress={handlePickImages}
+              disabled={attachmentButtonDisabled}
+              style={({ pressed }) => [
+                styles.attachmentButton,
+                pressed && !attachmentButtonDisabled ? styles.attachmentButtonPressed : null,
+                attachmentButtonDisabled ? styles.attachmentButtonDisabled : null,
+              ]}
+            >
+              <Ionicons
+                name="image"
+                size={18}
+                color={attachmentButtonDisabled ? '#9CA3AF' : ACCENT}
+              />
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Send message"
@@ -338,6 +474,36 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+  },
+  attachmentsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  attachmentThumbWrapper: {
+    position: 'relative',
+    width: 64,
+    height: 64,
+    marginRight: 8,
+    marginBottom: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#E5E7EB',
+  },
+  attachmentThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  attachmentRemoveButton: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(17, 24, 39, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   micButton: {
     width: 44,
@@ -372,6 +538,23 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
     fontSize: 16,
+  },
+  attachmentButton: {
+    marginLeft: 12,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachmentButtonPressed: {
+    transform: [{ scale: 0.96 }],
+  },
+  attachmentButtonDisabled: {
+    opacity: 0.5,
   },
   sendButton: {
     marginLeft: 12,
